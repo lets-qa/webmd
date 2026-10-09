@@ -11,8 +11,8 @@ license = "MIT"
 license-files = ["LICENSE"]
 authors = [{ name = "Randall Morse", email = "randymorse@gmail.com" }]
 requires-python = ">=3.9"
-dependencies = []
-keywords = ["markdown", "server", "preview", "docs", "cli"]
+dependencies = ["cryptography>=42"]
+keywords = ["markdown", "server", "preview", "docs", "cli", "https"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Environment :: Console",
@@ -37,3 +37,16 @@ path = "src/webmd/__init__.py"
 
 [tool.hatch.build.targets.sdist]
 include = ["src/webmd", "README.md", "LICENSE", "pyproject.toml"]
+
+[dependency-groups]
+dev = ["pytest>=8", "ruff>=0.6"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py39"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "B", "UP", "I"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
