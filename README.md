@@ -1,5 +1,7 @@
 # webmd
 
+[![CI](https://github.com/lets-qa/webmd/actions/workflows/ci.yml/badge.svg)](https://github.com/lets-qa/webmd/actions/workflows/ci.yml)
+
 Serve any directory in your browser, with Markdown files rendered as proper web
 pages. Point it at a folder of notes, docs, or a repo and browse it like a
 website: folders become clickable listings, `.md` files render GitHub-style,
@@ -238,10 +240,50 @@ Things to be aware of:
 git clone git@github.com:lets-qa/webmd.git
 cd webmd
 uv tool install --editable .   # `webmd` now runs your working copy
+uv run --group dev pytest      # run the test suite
+uv run --group dev ruff check . # lint
 uv build                       # build sdist + wheel into dist/
 ```
 
 The version lives in `src/webmd/__init__.py`.
+
+### CI
+
+Every push to `main` and every pull request runs
+[`.github/workflows/ci.yml`](.github/workflows/ci.yml):
+
+- **lint:** `ruff check`
+- **test:** pytest on Linux and macOS, Python 3.9 through 3.14
+- **build:** builds the sdist and wheel, runs `twine check`, and smoke-tests
+  the installed `webmd` command
+
+### Releasing
+
+Releases publish to PyPI from
+[`.github/workflows/release.yml`](.github/workflows/release.yml) using
+[Trusted Publishing](https://docs.pypi.org/trusted-publishers/), so no API
+token is stored in GitHub.
+
+**One-time setup:**
+
+1. On PyPI, go to *Your projects → Publishing* (or, before the first release,
+   *Account → Publishing → Add a new pending publisher*) and add:
+   - Owner: `lets-qa`, Repository: `webmd`
+   - Workflow: `release.yml`, Environment: `pypi`
+2. In GitHub, create an environment named `pypi` under *Settings →
+   Environments*. Optionally add yourself as a required reviewer so each
+   publish waits for approval.
+
+**Each release:**
+
+```bash
+# bump __version__ in src/webmd/__init__.py, commit, merge to main, then:
+git tag v0.2.0
+git push origin v0.2.0
+```
+
+The workflow checks the tag matches `__version__`, runs the tests, builds,
+publishes to PyPI, and creates a GitHub release with the built files attached.
 
 ## License
 
