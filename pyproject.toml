@@ -39,7 +39,11 @@ path = "src/webmd/__init__.py"
 include = ["src/webmd", "README.md", "LICENSE", "pyproject.toml"]
 
 [dependency-groups]
-dev = ["pytest>=8", "ruff>=0.6"]
+dev = [
+    "playwright>=1.40",
+    "pytest>=8",
+    "ruff>=0.6",
+]
 
 [tool.ruff]
 line-length = 120
