@@ -28,6 +28,7 @@ import json
 import os
 import secrets
 import socket
+import socketserver
 import ssl
 import sys
 import urllib.parse
@@ -303,7 +304,15 @@ class Handler(SimpleHTTPRequestHandler):
         sys.stderr.write(f"  {self.command} {self.path} -> {args[1] if len(args) > 1 else ''}\n")
 
 
-class TLSServer(ThreadingHTTPServer):
+class Server(ThreadingHTTPServer):
+    def server_bind(self):
+        # The stdlib calls socket.getfqdn() here, a reverse DNS lookup that can
+        # hang for many seconds before the socket starts listening.
+        socketserver.TCPServer.server_bind(self)
+        self.server_name, self.server_port = self.server_address[:2]
+
+
+class TLSServer(Server):
     """ThreadingHTTPServer that does the TLS handshake on the per-connection thread.
 
     Wrapping the listening socket would handshake inside accept(), letting one
@@ -390,7 +399,7 @@ def main():
         ctx, cert_path, cert_generated = setup_tls(args)
         server = TLSServer((args.bind, args.port), handler, ctx)
     else:
-        server = ThreadingHTTPServer((args.bind, args.port), handler)
+        server = Server((args.bind, args.port), handler)
     host = f"[{args.bind}]" if ":" in args.bind else args.bind
     url = f"{'https' if use_tls else 'http'}://{host}:{args.port}/"
     print(f"webmd serving {root}\n  -> {url}  (Ctrl-C to stop)", flush=True)

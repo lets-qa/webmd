@@ -61,3 +61,11 @@ def test_server_survives_rejected_cert(serve):
         with socket.create_connection(("127.0.0.1", s.port)) as raw:
             ssl.create_default_context().wrap_socket(raw, server_hostname="localhost")
     assert s.get("/")[0] == 200
+
+
+def test_long_hostname(tmp_path, monkeypatch):
+    # CN is capped at 64 chars; CI runners (and some real machines) have longer hostnames.
+    monkeypatch.setattr(socket, "gethostname", lambda: "h" * 67)
+    cert, key = tmp_path / "cert.pem", tmp_path / "key.pem"
+    assert tls.ensure_self_signed(cert, key, tls.local_names("0.0.0.0")) is True
+    assert "h" * 67 in tls._cert_names(x509.load_pem_x509_certificate(cert.read_bytes()))
