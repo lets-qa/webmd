@@ -22,6 +22,9 @@ jobs:
           persist-credentials: false
       - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
       - run: uv run --group dev ruff check .
+      - run: uv run --group dev ruff format --check .
+      - name: Vendored assets match their pinned, integrity-checked upstream
+        run: uv run --no-project python scripts/vendor_assets.py --check
 
   test:
     name: test (${{ matrix.os }}, py${{ matrix.python }})
@@ -29,7 +32,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        os: [ubuntu-latest, macos-latest, windows-latest]
         python: ["3.9", "3.10", "3.11", "3.12", "3.13", "3.14"]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -38,7 +41,11 @@ jobs:
       - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
           python-version: ${{ matrix.python }}
-      - run: uv run --group dev pytest -v
+      - name: Install Chromium for the browser rendering tests
+        run: uv run --group dev playwright install --with-deps chromium
+      - run: uv run --group dev pytest -v -rs
+        env:
+          WEBMD_REQUIRE_BROWSER: "1"  # a missing browser fails the job instead of skipping the XSS tests
 
   build:
     runs-on: ubuntu-latest
@@ -50,12 +57,37 @@ jobs:
       - run: uv build
       - name: Check package metadata
         run: uvx twine check --strict dist/*
-      - name: Smoke-test the built wheel
-        run: |
-          uv venv /tmp/smoke
-          uv pip install --python /tmp/smoke dist/*.whl
-          /tmp/smoke/bin/webmd --version
+      - name: Wheel and sdist contain the bundled assets
+        run: uv run --no-project python scripts/check_dist.py dist
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: dist
           path: dist/
+
+  # Install the built wheel in a clean venv (no repo on sys.path) on every OS,
+  # then serve and fetch a page with only the installed package.
+  install:
+    needs: build
+    name: install (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: dist
+          path: dist/
+      - name: Install wheel into a clean venv and smoke-test it
+        shell: bash
+        run: |
+          uv venv "$RUNNER_TEMP/smoke"
+          uv pip install --python "$RUNNER_TEMP/smoke" dist/*.whl
+          if [ "$RUNNER_OS" = "Windows" ]; then py="$RUNNER_TEMP/smoke/Scripts/python.exe"; else py="$RUNNER_TEMP/smoke/bin/python"; fi
+          cd "$RUNNER_TEMP"  # so the repo checkout can't shadow the installed package
+          "$py" "$GITHUB_WORKSPACE/scripts/smoke_installed.py"
