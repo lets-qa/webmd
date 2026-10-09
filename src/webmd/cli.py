@@ -733,21 +733,24 @@ def main():
     port = args.port if explicit_port else int(os.environ.get("WEBMD_DEFAULT_PORT", DEFAULT_PORT))
     server = bind_server(make_server, args.bind, port, strict=explicit_port)
     url = display_url("https" if use_tls else "http", args.bind, server.server_address[1])
-    print(f"webmd serving {root}\n  -> {url}  (Ctrl-C to stop)", flush=True)
+    # Build the banner first and print it in one write, so it can't interleave
+    # with request logs and anything reading it sees all of it at once.
+    banner = [f"webmd serving {root}", f"  -> {url}  (Ctrl-C to stop)"]
     if use_tls:
         from .tls import fingerprint
 
         source = "generated self-signed" if cert_generated else "using"
-        print(f"  tls: {source} certificate {cert_path}\n       SHA-256 {fingerprint(cert_path)}", flush=True)
+        banner += [f"  tls: {source} certificate {cert_path}", f"       SHA-256 {fingerprint(cert_path)}"]
     if use_auth:
         if generated:
-            print(f"  auth: generated credentials in {env_path}\n        user={user} password={password}", flush=True)
+            banner += [f"  auth: generated credentials in {env_path}", f"        user={user} password={password}"]
         else:
-            print(f"  auth: user={user} (password from {env_path} or WEBMD_PASSWORD)", flush=True)
+            banner.append(f"  auth: user={user} (password from {env_path} or WEBMD_PASSWORD)")
     elif not local:
-        print("  WARNING: listening on a non-loopback address with auth disabled (--no-auth)", flush=True)
+        banner.append("  WARNING: listening on a non-loopback address with auth disabled (--no-auth)")
     if use_auth and not use_tls:
-        print("  WARNING: auth without TLS (--no-tls) sends the password readable on the network", flush=True)
+        banner.append("  WARNING: auth without TLS (--no-tls) sends the password readable on the network")
+    print("\n".join(banner), flush=True)
     if args.open:
         webbrowser.open(url)
     try:

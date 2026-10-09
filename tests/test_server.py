@@ -144,7 +144,7 @@ def test_static_route_is_confined(serve, path):
 
 def test_static_route_does_not_shadow_served_files(serve, site):
     (site / "__webmd__").mkdir()
-    (site / "__webmd__" / "mine.txt").write_text("user file\n")
+    (site / "__webmd__" / "mine.txt").write_bytes(b"user file\n")
     s = serve()
     assert s.get("/__webmd__/mine.txt")[2] == "user file\n"
 

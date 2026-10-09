@@ -58,17 +58,26 @@ class Server:
         return vals["WEBMD_USER"], vals["WEBMD_PASSWORD"]
 
 
+def _accepts(port):
+    try:
+        socket.create_connection(("127.0.0.1", port), timeout=0.5).close()
+        return True
+    except OSError:
+        return False
+
+
 @pytest.fixture
 def site(tmp_path):
     root = tmp_path / "site"
     (root / "docs").mkdir(parents=True)
-    (root / "README.md").write_text("# Hello\n\n</script><b>x</b>\n")
+    # write_bytes, not write_text: on Windows text mode turns "\n" into "\r\n".
+    (root / "README.md").write_bytes(b"# Hello\n\n</script><b>x</b>\n")
     for fixture in FIXTURES.glob("*.md"):
-        (root / fixture.name).write_text(fixture.read_text(encoding="utf-8"), encoding="utf-8")
-    (root / "docs" / "guide.md").write_text("## Guide\n")
-    (root / "notes.txt").write_text("plain text\n")
-    (root / ".hidden").write_text("dotfile\n")
-    (root / ".env").write_text("SECRET=1\n")
+        (root / fixture.name).write_bytes(fixture.read_bytes())
+    (root / "docs" / "guide.md").write_bytes(b"## Guide\n")
+    (root / "notes.txt").write_bytes(b"plain text\n")
+    (root / ".hidden").write_bytes(b"dotfile\n")
+    (root / ".env").write_bytes(b"SECRET=1\n")
     return root
 
 
@@ -92,15 +101,17 @@ def serve(tmp_path, site):
             env=full_env,
         )
         procs.append(proc)
-        # Wait for the startup banner, and take the port from it: webmd may
-        # have fallen back to a different port than the one requested.
+        # Take the port from the banner (webmd may have fallen back to another
+        # one; the banner is printed in a single write), then wait until the
+        # server accepts connections.
         deadline = time.time() + 20
+        match = None
         while time.time() < deadline:
-            match = URL_LINE.search(log.read_text(encoding="utf-8"))
-            if match:
-                break
             if proc.poll() is not None:
                 pytest.fail(f"server exited early:\n{log.read_text(encoding='utf-8')}")
+            match = match or URL_LINE.search(log.read_text(encoding="utf-8"))
+            if match and _accepts(int(match["port"])):
+                break
             time.sleep(0.05)
         else:
             pytest.fail(f"server did not start:\n{log.read_text(encoding='utf-8')}")
