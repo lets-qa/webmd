@@ -2,16 +2,21 @@
 
 Usage:
     webmd [DIR] [-p PORT] [-b BIND] [--all] [--open] [--no-auth] [--env-file PATH]
+          [--tls | --no-tls] [--cert PATH --key PATH]
 
 Binds to 127.0.0.1 by default. When bound to any non-loopback address, HTTP
 Basic Auth is required (disable with --no-auth). Credentials come from
 WEBMD_USER / WEBMD_PASSWORD in the environment or the env file (default:
-$XDG_CONFIG_HOME/webmd/.env, i.e. ~/.config/webmd/.env), which is generated with a random password on
-first boot and reused afterwards.
+$XDG_CONFIG_HOME/webmd/.env, i.e. ~/.config/webmd/.env), which is generated
+with a random password on first boot and reused afterwards.
 
-Zero dependencies: uses only the Python standard library. Markdown is rendered
-client-side with marked.js (GitHub-flavored), styled with github-markdown-css,
-and code blocks are highlighted with highlight.js (all loaded from a CDN).
+Non-loopback binds also serve HTTPS by default (disable with --no-tls), using a
+self-signed certificate generated into the config dir, or your own via
+--cert/--key.
+
+Markdown is rendered client-side with marked.js (GitHub-flavored), styled with
+github-markdown-css, and code blocks are highlighted with highlight.js (all
+loaded from a CDN).
 """
 
 import argparse
@@ -23,6 +28,7 @@ import json
 import os
 import secrets
 import socket
+import ssl
 import sys
 import urllib.parse
 import webbrowser
@@ -34,7 +40,10 @@ from pathlib import Path
 from . import __version__
 
 MD_EXTENSIONS = {".md", ".markdown", ".mdown", ".mkd"}
-DEFAULT_ENV_FILE = Path(os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config") / "webmd" / ".env"
+CONFIG_DIR = Path(os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config") / "webmd"
+DEFAULT_ENV_FILE = CONFIG_DIR / ".env"
+DEFAULT_CERT = CONFIG_DIR / "cert.pem"
+DEFAULT_KEY = CONFIG_DIR / "key.pem"
 DEFAULT_USER = "webmd"
 
 PAGE = """<!doctype html>
@@ -294,6 +303,55 @@ class Handler(SimpleHTTPRequestHandler):
         sys.stderr.write(f"  {self.command} {self.path} -> {args[1] if len(args) > 1 else ''}\n")
 
 
+class TLSServer(ThreadingHTTPServer):
+    """ThreadingHTTPServer that does the TLS handshake on the per-connection thread.
+
+    Wrapping the listening socket would handshake inside accept(), letting one
+    slow or stalled client block every other connection.
+    """
+
+    handshake_timeout = 10
+
+    def __init__(self, addr, handler, ssl_context):
+        self.ssl_context = ssl_context
+        super().__init__(addr, handler)
+
+    def finish_request(self, request, client_address):
+        request.settimeout(self.handshake_timeout)
+        try:
+            first = request.recv(1, socket.MSG_PEEK)
+            if first and first != b"\x16":  # not a TLS ClientHello, so plain HTTP
+                request.sendall(b"HTTP/1.1 400 Bad Request\r\nContent-Type: text/plain\r\n"
+                                b"Connection: close\r\n\r\nThis server only speaks HTTPS. Use https://\n")
+                return
+            conn = self.ssl_context.wrap_socket(request, server_side=True)
+        except (ssl.SSLError, OSError):
+            return  # failed handshake (e.g. browser rejected the cert); process_request_thread closes it
+        try:
+            conn.settimeout(None)
+            self.RequestHandlerClass(conn, client_address, self)
+        finally:
+            conn.close()
+
+
+def setup_tls(args):
+    """Return (ssl_context, cert_path, generated) for the chosen cert source."""
+    from . import tls  # imported lazily: only TLS mode needs `cryptography`
+
+    if args.cert or args.key:
+        if not (args.cert and args.key):
+            sys.exit("webmd: --cert and --key must be given together")
+        cert_path, key_path, generated = args.cert.expanduser(), args.key.expanduser(), False
+    else:
+        cert_path, key_path = DEFAULT_CERT, DEFAULT_KEY
+        generated = tls.ensure_self_signed(cert_path, key_path, tls.local_names(args.bind))
+    try:
+        ctx = tls.server_context(cert_path, key_path)
+    except (OSError, ssl.SSLError) as e:
+        sys.exit(f"webmd: could not load certificate {cert_path} / key {key_path}: {e}")
+    return ctx, cert_path, generated
+
+
 def main():
     ap = argparse.ArgumentParser(prog="webmd", description="Serve a directory, rendering Markdown as HTML.")
     ap.add_argument("-V", "--version", action="version", version=f"%(prog)s {__version__}")
@@ -305,6 +363,10 @@ def main():
                     help="disable Basic Auth even when bound to a non-loopback address")
     ap.add_argument("--env-file", type=Path, default=DEFAULT_ENV_FILE,
                     help=f"credentials file (default: {DEFAULT_ENV_FILE})")
+    ap.add_argument("--tls", action=argparse.BooleanOptionalAction, default=None,
+                    help="serve HTTPS (default: on for non-loopback binds, off for localhost)")
+    ap.add_argument("--cert", type=Path, help=f"TLS certificate PEM (default: self-signed {DEFAULT_CERT})")
+    ap.add_argument("--key", type=Path, help=f"TLS private key PEM (default: {DEFAULT_KEY})")
     ap.add_argument("--all", action="store_true", help="show dotfiles in listings")
     ap.add_argument("--open", action="store_true", help="open the browser on start")
     args = ap.parse_args()
@@ -314,24 +376,38 @@ def main():
         sys.exit(f"webmd: not a directory: {root}")
 
     Handler.show_hidden = args.all
-    use_auth = not is_loopback(args.bind) and not args.no_auth
+    local = is_loopback(args.bind)
+    use_auth = not local and not args.no_auth
+    use_tls = (not local) if args.tls is None else args.tls
     if use_auth:
         env_path = args.env_file.expanduser().resolve()
         user, password, generated = load_credentials(env_path)
         token = base64.b64encode(f"{user}:{password}".encode()).decode()
         Handler.auth_header = f"Basic {token}"
 
-    server = ThreadingHTTPServer((args.bind, args.port), partial(Handler, directory=str(root)))
+    handler = partial(Handler, directory=str(root))
+    if use_tls:
+        ctx, cert_path, cert_generated = setup_tls(args)
+        server = TLSServer((args.bind, args.port), handler, ctx)
+    else:
+        server = ThreadingHTTPServer((args.bind, args.port), handler)
     host = f"[{args.bind}]" if ":" in args.bind else args.bind
-    url = f"http://{host}:{args.port}/"
+    url = f"{'https' if use_tls else 'http'}://{host}:{args.port}/"
     print(f"webmd serving {root}\n  -> {url}  (Ctrl-C to stop)", flush=True)
+    if use_tls:
+        from .tls import fingerprint
+        source = "generated self-signed" if cert_generated else "using"
+        print(f"  tls: {source} certificate {cert_path}\n"
+              f"       SHA-256 {fingerprint(cert_path)}", flush=True)
     if use_auth:
         if generated:
             print(f"  auth: generated credentials in {env_path}\n        user={user} password={password}", flush=True)
         else:
             print(f"  auth: user={user} (password from {env_path} or WEBMD_PASSWORD)", flush=True)
-    elif not is_loopback(args.bind):
+    elif not local:
         print("  WARNING: listening on a non-loopback address with auth disabled (--no-auth)", flush=True)
+    if use_auth and not use_tls:
+        print("  WARNING: auth without TLS (--no-tls) sends the password readable on the network", flush=True)
     if args.open:
         webbrowser.open(url)
     try:

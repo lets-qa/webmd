@@ -11,8 +11,8 @@ license = "MIT"
 license-files = ["LICENSE"]
 authors = [{ name = "Randall Morse", email = "randymorse@gmail.com" }]
 requires-python = ">=3.9"
-dependencies = []
-keywords = ["markdown", "server", "preview", "docs", "cli"]
+dependencies = ["cryptography>=42"]
+keywords = ["markdown", "server", "preview", "docs", "cli", "https"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Environment :: Console",

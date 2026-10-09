@@ -5,7 +5,8 @@ pages. Point it at a folder of notes, docs, or a repo and browse it like a
 website: folders become clickable listings, `.md` files render GitHub-style,
 and everything else (images, PDFs, source files) is served as-is.
 
-Zero dependencies: just the Python standard library.
+Pure Python, with a single dependency
+([`cryptography`](https://cryptography.io/), used for HTTPS certificates).
 
 ```bash
 cd ~/notes
@@ -27,11 +28,11 @@ webmd --open
   Markdown just work.
 - **Safe by default**:
   - binds to `127.0.0.1` (localhost only) unless you say otherwise
-  - auto-enables HTTP Basic Auth whenever it's exposed beyond localhost, with
-    a generated password
+  - auto-enables **HTTPS** and **HTTP Basic Auth** whenever it's exposed
+    beyond localhost, with a generated self-signed certificate and password
   - refuses paths that escape the served directory (`../`, symlinks out)
   - never serves or lists `.env` / `.env.*` files
-- **No build step, no config, no dependencies**. Works on Python 3.9+.
+- **No build step, no config**. Works on Python 3.9+.
 
 ## Install
 
@@ -86,17 +87,20 @@ uv tool uninstall webmd   # pipx uninstall webmd
 
 ```
 webmd [DIR] [-p PORT] [-b BIND] [--all] [--open] [--no-auth] [--env-file PATH]
+      [--tls | --no-tls] [--cert PATH --key PATH]
 ```
 
 | Option | Default | Description |
 |---|---|---|
 | `DIR` | `.` | Directory to serve |
 | `-p`, `--port` | `8000` | Port to listen on |
-| `-b`, `--bind` | `127.0.0.1` | Address to bind. Any non-loopback address turns on auth |
+| `-b`, `--bind` | `127.0.0.1` | Address to bind. Any non-loopback address turns on HTTPS and auth |
 | `--all` | off | Show dotfiles in directory listings |
 | `--open` | off | Open your browser when the server starts |
 | `--no-auth` | off | Disable Basic Auth even when bound to a non-loopback address |
 | `--env-file` | `~/.config/webmd/.env` | Where credentials are read from / generated to |
+| `--tls` / `--no-tls` | on if non-loopback | Force HTTPS on (even on localhost) or off |
+| `--cert`, `--key` | self-signed in `~/.config/webmd/` | Use your own certificate and private key (PEM) |
 | `-V`, `--version` | | Print the version and exit |
 
 ### Examples
@@ -119,26 +123,33 @@ python -m webmd               # same as `webmd`, no console script needed
 | `/notes/todo.md#next-steps` | Rendered page, scrolled to that heading |
 | `/images/diagram.png` | The file itself |
 
-## Sharing on your network (auth)
+## Sharing on your network (HTTPS + auth)
 
 By default webmd only listens on localhost, so nothing else on your network
-can reach it. To share it, bind to another address. Basic Auth then turns on
-automatically:
+can reach it. To share it, bind to another address. **HTTPS and Basic Auth
+then both turn on automatically**:
 
 ```bash
-webmd -b 0.0.0.0              # reachable from your LAN, login required
+webmd -b 0.0.0.0              # reachable from your LAN at https://, login required
 ```
 
-**First start:** webmd generates a random password, writes it to
-`~/.config/webmd/.env` (file mode `0600`; honours `$XDG_CONFIG_HOME`), and
-prints it:
+**First start:** webmd generates a self-signed certificate and a random
+password into `~/.config/webmd/` (honours `$XDG_CONFIG_HOME`), and prints both:
 
 ```
 webmd serving /Users/you/notes
-  -> http://0.0.0.0:8000/  (Ctrl-C to stop)
+  -> https://0.0.0.0:8000/  (Ctrl-C to stop)
+  tls: generated self-signed certificate /Users/you/.config/webmd/cert.pem
+       SHA-256 79:6F:B0:A8:...:67:51:53
   auth: generated credentials in /Users/you/.config/webmd/.env
         user=webmd password=<random-generated-password>
 ```
+
+| File | Mode | Contents |
+|---|---|---|
+| `~/.config/webmd/.env` | `0600` | Basic Auth username and password |
+| `~/.config/webmd/cert.pem` | `0644` | Self-signed certificate |
+| `~/.config/webmd/key.pem` | `0600` | Certificate private key |
 
 **Every start after that** reuses the existing file. Edit it to choose your
 own credentials; changes apply on the next restart:
@@ -161,13 +172,54 @@ WEBMD_PASSWORD=correct-horse-battery-staple
 webmd -b 0.0.0.0 --no-auth    # prints a warning on start
 ```
 
-> **Note:** Basic Auth sends credentials base64-encoded, not encrypted. On
-> untrusted networks, put webmd behind HTTPS (e.g. Caddy, Tailscale, or
-> cloudflared) rather than exposing it directly.
+### HTTPS and the self-signed certificate
+
+The generated certificate covers `localhost`, `127.0.0.1`, `::1`, your
+hostname (plus `<hostname>.local`), your LAN IP, and the `-b` address. It's
+valid for 825 days and is **regenerated automatically** when it's within 30
+days of expiry or no longer covers your current hostname or IP (for example
+after you join a different network). Otherwise the same certificate is reused,
+so its fingerprint stays stable.
+
+Because it's self-signed, **browsers will warn "Your connection is not
+private"** the first time on each device. That's expected:
+
+1. Compare the SHA-256 fingerprint printed at startup with the one the browser
+   shows (click the warning → view certificate).
+2. If they match, proceed. If they don't, something is intercepting the
+   connection, so don't continue.
+
+Visiting the `http://` URL of an HTTPS server returns a short
+"This server only speaks HTTPS" message.
+
+**No warnings, using your own certificate.** With
+[mkcert](https://github.com/FiloSottile/mkcert) you can create a certificate
+your own devices trust:
+
+```bash
+mkcert -install
+mkcert localhost 192.168.1.20 my-laptop.local
+webmd -b 0.0.0.0 --cert localhost+2.pem --key localhost+2-key.pem
+```
+
+Any PEM certificate and key work, including ones from Let's Encrypt.
+
+**Other combinations:**
+
+```bash
+webmd --tls                   # HTTPS on localhost too
+webmd -b 0.0.0.0 --no-tls     # plain HTTP on the LAN (warns: password not encrypted)
+```
+
+> **Note:** with `--no-tls`, Basic Auth credentials travel base64-encoded,
+> not encrypted. Keep TLS on unless something else (a reverse proxy,
+> Tailscale, cloudflared) already provides HTTPS in front of webmd.
 
 ## How it works
 
-webmd extends Python's built-in `http.server`. When a request hits a Markdown
+webmd extends Python's built-in `http.server`. In HTTPS mode the TLS
+handshake runs on each connection's own thread, so a slow or stalled client
+can't block anyone else. When a request hits a Markdown
 file, the server embeds the raw source in a small HTML page, and the browser
 renders it with [marked](https://marked.js.org/), styles it with
 [github-markdown-css](https://github.com/sindresorhus/github-markdown-css), and
