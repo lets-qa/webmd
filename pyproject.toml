@@ -19,6 +19,9 @@ classifiers = [
     "Environment :: Web Environment",
     "Intended Audience :: Developers",
     "Operating System :: OS Independent",
+    "Operating System :: MacOS",
+    "Operating System :: Microsoft :: Windows",
+    "Operating System :: POSIX :: Linux",
     "Programming Language :: Python :: 3",
     "Topic :: Text Processing :: Markup :: Markdown",
     "Topic :: Internet :: WWW/HTTP :: HTTP Servers",
@@ -28,6 +31,7 @@ classifiers = [
 Homepage = "https://github.com/lets-qa/webmd"
 Repository = "https://github.com/lets-qa/webmd"
 Issues = "https://github.com/lets-qa/webmd/issues"
+Changelog = "https://github.com/lets-qa/webmd/blob/main/CHANGELOG.md"
 
 [project.scripts]
 webmd = "webmd.cli:main"
@@ -36,7 +40,7 @@ webmd = "webmd.cli:main"
 path = "src/webmd/__init__.py"
 
 [tool.hatch.build.targets.sdist]
-include = ["src/webmd", "README.md", "LICENSE", "pyproject.toml"]
+include = ["/src/webmd", "/README.md", "/CHANGELOG.md", "/LICENSE", "/pyproject.toml"]
 
 [dependency-groups]
 dev = [
