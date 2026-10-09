@@ -72,7 +72,9 @@ def serve(tmp_path, site):
         log = tmp_path / f"server-{port}.log"
         proc = subprocess.Popen(
             [sys.executable, "-m", "webmd", str(site), "-p", str(port), *args],
-            stdout=log.open("w"), stderr=subprocess.STDOUT, env=full_env,
+            stdout=log.open("w"),
+            stderr=subprocess.STDOUT,
+            env=full_env,
         )
         procs.append(proc)
         deadline = time.time() + 15

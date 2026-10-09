@@ -75,11 +75,13 @@ def ensure_self_signed(cert_path, key_path, names):
         return False
 
     key = ec.generate_private_key(ec.SECP256R1())
-    subject = x509.Name([
-        # Browsers match against the SAN list, not the CN, and CN is capped at 64 chars.
-        x509.NameAttribute(NameOID.COMMON_NAME, "webmd"),
-        x509.NameAttribute(NameOID.ORGANIZATION_NAME, "webmd self-signed"),
-    ])
+    subject = x509.Name(
+        [
+            # Browsers match against the SAN list, not the CN, and CN is capped at 64 chars.
+            x509.NameAttribute(NameOID.COMMON_NAME, "webmd"),
+            x509.NameAttribute(NameOID.ORGANIZATION_NAME, "webmd self-signed"),
+        ]
+    )
     now = datetime.datetime.now(datetime.timezone.utc)
     cert = (
         x509.CertificateBuilder()

@@ -6,10 +6,16 @@ import pytest
 from webmd.cli import is_env_file, is_loopback, read_env_file
 
 
-@pytest.mark.parametrize("host,expected", [
-    ("127.0.0.1", True), ("::1", True), ("localhost", True),
-    ("0.0.0.0", False), ("192.168.1.5", False),
-])
+@pytest.mark.parametrize(
+    "host,expected",
+    [
+        ("127.0.0.1", True),
+        ("::1", True),
+        ("localhost", True),
+        ("0.0.0.0", False),
+        ("192.168.1.5", False),
+    ],
+)
 def test_is_loopback(host, expected):
     assert is_loopback(host) is expected
 
@@ -21,7 +27,7 @@ def test_is_env_file():
 
 def test_read_env_file(tmp_path):
     f = tmp_path / ".env"
-    f.write_text('# comment\nexport A=1\nB="two"\nC=\'three\'\n\nnot a pair\n')
+    f.write_text("# comment\nexport A=1\nB=\"two\"\nC='three'\n\nnot a pair\n")
     assert read_env_file(f) == {"A": "1", "B": "two", "C": "three"}
 
 

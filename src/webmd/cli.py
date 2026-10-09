@@ -170,6 +170,7 @@ def sort_entries(entries):
     Current policy: directories first, then Markdown files, then everything
     else; case-insensitive alphabetical within each group.
     """
+
     def key(e):
         if e.is_dir():
             group = 0
@@ -264,18 +265,23 @@ class Handler(SimpleHTTPRequestHandler):
             return
         # Embed as JSON; escaping "</" stops the content from closing the script tag.
         embedded = json.dumps(source).replace("</", "<\\/")
-        self._send_html(PAGE.format(
-            title=html.escape(path.name),
-            breadcrumbs=self._breadcrumbs(url_path),
-            extra='<a class="raw" href="?raw">raw</a>',
-            body="",
-            scripts=MD_SCRIPTS.replace("{source}", embedded),
-        ))
+        self._send_html(
+            PAGE.format(
+                title=html.escape(path.name),
+                breadcrumbs=self._breadcrumbs(url_path),
+                extra='<a class="raw" href="?raw">raw</a>',
+                body="",
+                scripts=MD_SCRIPTS.replace("{source}", embedded),
+            )
+        )
 
     def list_directory(self, path):
         try:
-            entries = [e for e in os.scandir(path)
-                       if not is_env_file(e.name) and (self.show_hidden or not e.name.startswith("."))]
+            entries = [
+                e
+                for e in os.scandir(path)
+                if not is_env_file(e.name) and (self.show_hidden or not e.name.startswith("."))
+            ]
         except OSError:
             self.send_error(HTTPStatus.NOT_FOUND, "No permission to list directory")
             return None
@@ -292,12 +298,16 @@ class Handler(SimpleHTTPRequestHandler):
             label = html.escape(e.name) + ("/" if is_dir else "")
             items.append(f'<li><span class="icon">{icon}</span><a href="{href}">{label}</a></li>')
 
-        body = f"<h2>{html.escape(url_path or '/')}</h2><ul class=\"listing\">{''.join(items)}</ul>"
-        self._send_html(PAGE.format(
-            title=html.escape(url_path or "/"),
-            breadcrumbs=self._breadcrumbs(url_path),
-            extra="", body=body, scripts="",
-        ))
+        body = f'<h2>{html.escape(url_path or "/")}</h2><ul class="listing">{"".join(items)}</ul>'
+        self._send_html(
+            PAGE.format(
+                title=html.escape(url_path or "/"),
+                breadcrumbs=self._breadcrumbs(url_path),
+                extra="",
+                body=body,
+                scripts="",
+            )
+        )
         return None  # we already wrote the response
 
     def log_message(self, fmt, *args):
@@ -330,8 +340,10 @@ class TLSServer(Server):
         try:
             first = request.recv(1, socket.MSG_PEEK)
             if first and first != b"\x16":  # not a TLS ClientHello, so plain HTTP
-                request.sendall(b"HTTP/1.1 400 Bad Request\r\nContent-Type: text/plain\r\n"
-                                b"Connection: close\r\n\r\nThis server only speaks HTTPS. Use https://\n")
+                request.sendall(
+                    b"HTTP/1.1 400 Bad Request\r\nContent-Type: text/plain\r\n"
+                    b"Connection: close\r\n\r\nThis server only speaks HTTPS. Use https://\n"
+                )
                 return
             conn = self.ssl_context.wrap_socket(request, server_side=True)
         except (ssl.SSLError, OSError):
@@ -366,14 +378,24 @@ def main():
     ap.add_argument("-V", "--version", action="version", version=f"%(prog)s {__version__}")
     ap.add_argument("dir", nargs="?", default=".", help="directory to serve (default: .)")
     ap.add_argument("-p", "--port", type=int, default=8000)
-    ap.add_argument("-b", "--bind", default="127.0.0.1",
-                    help="address to bind (default: 127.0.0.1); non-loopback enables Basic Auth")
-    ap.add_argument("--no-auth", action="store_true",
-                    help="disable Basic Auth even when bound to a non-loopback address")
-    ap.add_argument("--env-file", type=Path, default=DEFAULT_ENV_FILE,
-                    help=f"credentials file (default: {DEFAULT_ENV_FILE})")
-    ap.add_argument("--tls", action=argparse.BooleanOptionalAction, default=None,
-                    help="serve HTTPS (default: on for non-loopback binds, off for localhost)")
+    ap.add_argument(
+        "-b",
+        "--bind",
+        default="127.0.0.1",
+        help="address to bind (default: 127.0.0.1); non-loopback enables Basic Auth",
+    )
+    ap.add_argument(
+        "--no-auth", action="store_true", help="disable Basic Auth even when bound to a non-loopback address"
+    )
+    ap.add_argument(
+        "--env-file", type=Path, default=DEFAULT_ENV_FILE, help=f"credentials file (default: {DEFAULT_ENV_FILE})"
+    )
+    ap.add_argument(
+        "--tls",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="serve HTTPS (default: on for non-loopback binds, off for localhost)",
+    )
     ap.add_argument("--cert", type=Path, help=f"TLS certificate PEM (default: self-signed {DEFAULT_CERT})")
     ap.add_argument("--key", type=Path, help=f"TLS private key PEM (default: {DEFAULT_KEY})")
     ap.add_argument("--all", action="store_true", help="show dotfiles in listings")
@@ -405,9 +427,9 @@ def main():
     print(f"webmd serving {root}\n  -> {url}  (Ctrl-C to stop)", flush=True)
     if use_tls:
         from .tls import fingerprint
+
         source = "generated self-signed" if cert_generated else "using"
-        print(f"  tls: {source} certificate {cert_path}\n"
-              f"       SHA-256 {fingerprint(cert_path)}", flush=True)
+        print(f"  tls: {source} certificate {cert_path}\n       SHA-256 {fingerprint(cert_path)}", flush=True)
     if use_auth:
         if generated:
             print(f"  auth: generated credentials in {env_path}\n        user={user} password={password}", flush=True)
