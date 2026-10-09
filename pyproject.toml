@@ -1,0 +1,39 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "webmd"
+dynamic = ["version"]
+description = "Serve a directory in the browser, rendering Markdown files as web pages."
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "Randall Morse", email = "randymorse@gmail.com" }]
+requires-python = ">=3.9"
+dependencies = []
+keywords = ["markdown", "server", "preview", "docs", "cli"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Environment :: Web Environment",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Topic :: Text Processing :: Markup :: Markdown",
+    "Topic :: Internet :: WWW/HTTP :: HTTP Servers",
+]
+
+[project.urls]
+Homepage = "https://github.com/lets-qa/webmd"
+Repository = "https://github.com/lets-qa/webmd"
+Issues = "https://github.com/lets-qa/webmd/issues"
+
+[project.scripts]
+webmd = "webmd.cli:main"
+
+[tool.hatch.version]
+path = "src/webmd/__init__.py"
+
+[tool.hatch.build.targets.sdist]
+include = ["src/webmd", "README.md", "LICENSE", "pyproject.toml"]
