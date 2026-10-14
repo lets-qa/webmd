@@ -16,12 +16,6 @@ FIXTURES = Path(__file__).parent / "fixtures"
 URL_LINE = re.compile(r"-> (?P<scheme>https?)://[^ ]*:(?P<port>\d+)/")
 
 
-def free_port():
-    with socket.socket() as s:
-        s.bind(("127.0.0.1", 0))
-        return s.getsockname()[1]
-
-
 class NoRedirect(urllib.request.HTTPRedirectHandler):
     def redirect_request(self, *args, **kwargs):
         return None  # surface 301s to the test instead of following them
@@ -85,16 +79,16 @@ def site(tmp_path):
 def serve(tmp_path, site):
     procs = []
 
-    def start(*args, env=None, port=None, port_flag=True):
-        port = port or free_port()
+    def start(*args, env=None, port_flag=True):
         config_home = tmp_path / "config"
         # Isolate from the developer's real config and credentials.
         full_env = {k: v for k, v in os.environ.items() if not k.startswith("WEBMD_")}
         full_env["PYTHONUNBUFFERED"] = "1"
         full_env.update(XDG_CONFIG_HOME=str(config_home), **(env or {}))
-        # Unique per server: free_port() can hand out the same port twice in one test.
-        log = tmp_path / f"server-{len(procs)}-{port}.log"
-        port_args = ["-p", str(port)] if port_flag and "-p" not in args else []
+        log = tmp_path / f"server-{len(procs)}.log"
+        # -p 0: the OS picks a free port at bind time and webmd prints it. Picking
+        # one here and passing it in races with other processes (seen in CI).
+        port_args = ["-p", "0"] if port_flag and "-p" not in args else []
         proc = subprocess.Popen(
             [sys.executable, "-m", "webmd", str(site), *port_args, *args],
             stdout=log.open("w"),
