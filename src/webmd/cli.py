@@ -563,15 +563,35 @@ class TLSServer(Server):
         self.ssl_context = ssl_context
         super().__init__(addr, handler)
 
+    PLAIN_HTTP_BODY = b"This server only speaks HTTPS. Use https://\n"
+
+    def _reject_plain_http(self, request):
+        """Answer a plain-HTTP request on the HTTPS port with a readable 400.
+
+        Browsers need Content-Length to know the reply is complete, and the
+        request must be read before closing: closing with unread data makes the
+        OS send a reset, and the browser then drops the reply and keeps waiting.
+        """
+        try:
+            request.recv(65536)  # the request line + headers; we don't need them
+        except OSError:
+            pass
+        body = self.PLAIN_HTTP_BODY
+        request.sendall(
+            b"HTTP/1.1 400 Bad Request\r\nContent-Type: text/plain; charset=utf-8\r\n"
+            b"Content-Length: " + str(len(body)).encode() + b"\r\nConnection: close\r\n\r\n" + body
+        )
+        try:
+            request.shutdown(socket.SHUT_WR)
+        except OSError:
+            pass
+
     def finish_request(self, request, client_address):
         request.settimeout(self.handshake_timeout)
         try:
             first = request.recv(1, socket.MSG_PEEK)
             if first and first != b"\x16":  # not a TLS ClientHello, so plain HTTP
-                request.sendall(
-                    b"HTTP/1.1 400 Bad Request\r\nContent-Type: text/plain\r\n"
-                    b"Connection: close\r\n\r\nThis server only speaks HTTPS. Use https://\n"
-                )
+                self._reject_plain_http(request)
                 return
             conn = self.ssl_context.wrap_socket(request, server_side=True)
         except (ssl.SSLError, OSError):
