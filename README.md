@@ -365,16 +365,49 @@ cd webmd
 uv tool install --editable .              # `webmd` now runs your working copy
 uv run --group dev playwright install chromium   # once: browser for the rendering tests
 uv run --group dev pytest                 # run the test suite
+uv run --group dev pytest --cov           # ...with coverage (fails under 90%)
 uv run --group dev ruff check .           # lint
 uv run --group dev ruff format .          # format (CI runs `ruff format --check .`)
 uv build                                  # build sdist + wheel into dist/
 uv run --no-project python scripts/check_dist.py dist   # check both contain the bundled assets
 ```
 
-The browser tests in `tests/test_render_browser.py` run the real rendering
-pipeline in headless Chromium, with all non-webmd network access blocked.
-Locally they're skipped if Chromium isn't installed. CI sets
-`WEBMD_REQUIRE_BROWSER=1` so a missing browser fails the job instead.
+### Tests
+
+| File | What it covers |
+|---|---|
+| `test_server.py` | HTTP behaviour: listings, rendering, `?raw`, bundled assets, blocked paths, security headers |
+| `test_ports.py` | Default-port fallback, explicit `-p`, bind errors, platform differences |
+| `test_auth.py` | Failed-login backoff, the global cap, cleanup, concurrency, `429`s |
+| `test_tls.py` | Certificate generation, renewal, fingerprint, plain-HTTP-on-HTTPS-port |
+| `test_cli_errors.py` | Startup errors (bad dir, `--cert`/`--key`, unloadable cert), credentials file handling |
+| `test_permissions.py` | Owner-only files on POSIX, Windows behaviour, atomic replace |
+| `test_render_browser.py` | **Playwright/Chromium:** Markdown rendering, ~25 XSS payloads, CSP and Trusted Types, offline |
+| `test_e2e_https.py` | **Playwright/Chromium:** self-signed HTTPS and the generated password, end to end |
+
+The browser tests run the real client-side code in headless Chromium, with
+every request outside the webmd server blocked. The HTTPS tests don't switch
+off certificate checking. A normal browser must reject webmd's self-signed
+certificate. A browser told to trust *only that certificate's key* (pinned with
+Chromium's `--ignore-certificate-errors-spki-list`) must accept it, and the
+certificate it receives must match the SHA-256 fingerprint webmd printed. The
+generated password must log in, and a wrong user, wrong password or no
+password must not. Locally, browser tests are skipped if Chromium isn't
+installed. CI sets `WEBMD_REQUIRE_BROWSER=1` so a missing browser fails the job
+instead.
+
+### Coverage
+
+`pytest --cov` measures branch coverage of `src/webmd`, including the webmd
+server processes the tests start. The settings in `pyproject.toml`
+(`patch = ["subprocess"]`, `sigterm = true`) make coverage follow those
+processes and save their data when the tests stop them. Coverage fails below
+**90%**. In CI, each OS/Python job uploads its data, and a `coverage` job
+combines all 18 and enforces the floor on the total. Windows-only and
+POSIX-only code can only be covered across platforms, so that's the number
+that counts. The combined report appears in the run summary, and an HTML
+report is uploaded as the `coverage-html` artifact. Browser JavaScript
+(`webmd.js`) isn't measured; the Playwright tests exercise it.
 
 To update a bundled library, change its pin (URL and npm `integrity`) in
 `scripts/vendor_assets.py` and run `python scripts/vendor_assets.py`. CI checks
@@ -390,12 +423,35 @@ Every push to `main` and every pull request runs
 
 - **lint:** `ruff check`, `ruff format --check`, and a check that the bundled
   assets match their pinned upstream versions
-- **test:** pytest, including the headless-Chromium rendering tests, on
+- **test:** pytest with coverage, including the headless-Chromium tests, on
   **Linux, macOS and Windows** with Python 3.9 through 3.14 (18 jobs)
+- **coverage:** combines coverage from all 18 test jobs and fails below 90%
 - **build:** builds the sdist and wheel, runs `twine check --strict`, and
   checks both contain every bundled asset
 - **install:** installs the built wheel into a clean environment on each of
   the three OSes, starts it, and fetches a page and all of its assets
+- **ci-passed:** a final gate that succeeds only if every job above succeeded.
+  A failed, skipped or cancelled job fails it.
+
+### Merge protection
+
+`main` is protected by a repository ruleset, **"main: require CI"** (*Settings →
+Rules → Rulesets*):
+
+- Changes reach `main` only through a pull request; direct pushes are blocked.
+- A PR can merge only when the **`ci-passed`** check is green. That covers
+  lint, all 18 test jobs, combined coverage ≥ 90%, the build, and the install
+  smoke tests. Branch protection requires just that one check, so adding or
+  renaming matrix jobs doesn't need a settings change.
+- PRs don't have to be up to date with `main` first, and no approving review
+  is required.
+- Force-pushes to `main` and deleting it are blocked.
+- Repository admins can bypass the rule in an emergency. GitHub records each
+  bypass.
+
+PRs targeting other branches (for example, a PR stacked on a release branch)
+still run CI, but merging them isn't gated. The gate applies when the work
+reaches `main`.
 
 ### Releasing
 

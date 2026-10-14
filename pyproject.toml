@@ -44,8 +44,10 @@ include = ["/src/webmd", "/README.md", "/CHANGELOG.md", "/LICENSE", "/pyproject.
 
 [dependency-groups]
 dev = [
+    "coverage[toml]>=7.10.6",
     "playwright>=1.40",
     "pytest>=8",
+    "pytest-cov>=6",
     "ruff>=0.6",
 ]
 
@@ -58,3 +60,25 @@ select = ["E", "F", "W", "B", "UP", "I"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[tool.coverage.run]
+source = ["webmd"]
+branch = true
+# Most tests start webmd as a subprocess and stop it with SIGTERM. "patch"
+# makes coverage follow those subprocesses; sigterm makes them save data on exit.
+patch = ["subprocess"]
+sigterm = true
+parallel = true
+# CI combines data from Linux, macOS and Windows runners: map their paths together.
+relative_files = true
+
+[tool.coverage.paths]
+source = ["src/webmd", "*/src/webmd", "*\\src\\webmd"]
+
+[tool.coverage.report]
+fail_under = 90
+show_missing = true
+skip_covered = false
+exclude_also = [
+    'if __name__ == .__main__.:',
+]
