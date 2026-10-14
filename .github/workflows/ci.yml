@@ -5,6 +5,12 @@ on:
     branches: [main]
   pull_request:
   workflow_dispatch:
+  workflow_call:  # release.yml runs the full suite this way when the tag's code hasn't passed yet
+    inputs:
+      full:
+        description: Always run the full suite (skip the reuse check)
+        type: boolean
+        default: true
 
 permissions:
   contents: read
@@ -14,7 +20,32 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Skip the suite when this exact code (same git tree) already passed. For
+  # example: a PR passes, then merging it to main changes no file, so the push
+  # to main has the same tree. Any difference in any file, tests and workflows
+  # included, means a new tree, and the suite runs. Manual runs, re-runs and
+  # release-triggered runs always test.
+  # See "Avoiding repeat runs" in the README.
+  reuse:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read  # to look up earlier runs
+    outputs:
+      passed: ${{ steps.check.outputs.passed }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - id: check
+        if: >-
+          github.run_attempt == '1' && !inputs.full &&
+          (github.event_name == 'push' || github.event_name == 'pull_request')
+        uses: $/.github/actions/already-tested
+
   lint:
+    needs: reuse
+    if: needs.reuse.outputs.passed != 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -27,6 +58,8 @@ jobs:
         run: uv run --no-project python scripts/vendor_assets.py --check
 
   test:
+    needs: reuse
+    if: needs.reuse.outputs.passed != 'true'
     name: test (${{ matrix.os }}, py${{ matrix.python }})
     runs-on: ${{ matrix.os }}
     strategy:
@@ -87,6 +120,8 @@ jobs:
           path: htmlcov/
 
   build:
+    needs: reuse
+    if: needs.reuse.outputs.passed != 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -135,19 +170,47 @@ jobs:
   # README). It depends on every other job, so the branch rule never needs
   # updating when matrix entries are added or renamed. `if: always()` makes it
   # run, and fail, when a dependency fails or is skipped/cancelled. Without
-  # that, a skipped gate would count as passing.
+  # that, a skipped gate would count as passing. The one exception: every job
+  # was skipped because the reuse check found this exact code already passed.
   ci-passed:
     name: ci-passed
     if: always()
-    needs: [lint, test, coverage, build, install]
+    needs: [reuse, lint, test, coverage, build, install]
     runs-on: ubuntu-latest
     steps:
       - name: Require every CI job to have succeeded
         env:
+          REUSE_RESULT: ${{ needs.reuse.result }}
+          REUSED: ${{ needs.reuse.outputs.passed }}
           RESULTS: ${{ toJSON(needs.*.result) }}
         run: |
           echo "job results: $RESULTS"
+          if [ "$REUSE_RESULT" = "success" ] && [ "$REUSED" = "true" ]; then
+            echo "Identical code already passed CI; not re-running (see the reuse job for the run)."
+            exit 0
+          fi
           if [ "$(echo "$RESULTS" | jq -r 'all(. == "success")')" != "true" ]; then
             echo "::error::Not all CI jobs succeeded: $RESULTS"
             exit 1
           fi
+          echo "FULL_PASS=true" >> "$GITHUB_ENV"
+      # Record exactly what was tested, so identical code can skip CI later
+      # (scripts/ci_already_passed.sh). Only for a real full pass, never a reuse.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: env.FULL_PASS == 'true'
+        with:
+          persist-credentials: false
+      - name: Write tested-tree marker
+        if: env.FULL_PASS == 'true'
+        id: marker
+        run: |
+          tree=$(git rev-parse "HEAD^{tree}")
+          printf 'tree=%s\ncommit=%s\nrun=%s\nevent=%s\n' "$tree" "$GITHUB_SHA" "$GITHUB_RUN_ID" "$GITHUB_EVENT_NAME" > tested-tree.txt
+          echo "tree=$tree" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: env.FULL_PASS == 'true'
+        with:
+          name: tested-tree-${{ steps.marker.outputs.tree }}
+          path: tested-tree.txt
+          retention-days: 90
+          overwrite: true

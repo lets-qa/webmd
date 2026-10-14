@@ -29,6 +29,12 @@ changes under **Security**, **Added**, **Changed**, **Fixed**, **Removed**, and
   (logs in, survives restarts, edits to `.env` respected, wrong or missing
   credentials refused).
 - Tests for startup errors and credentials-file handling.
+- CI skips the full suite on `main` when that exact code already passed, matched
+  by git tree so any changed file, tests and workflows included, re-runs it.
+  Releases reuse a pass on the tagged code, or run the full suite before
+  publishing if there isn't one.
+- The release workflow now runs the same full CI suite as PRs (all OSes,
+  coverage, install checks). It used to run only `pytest -q` on Linux.
 
 ## [0.2.1] - Unreleased (release candidate; date set when tagged)
 
