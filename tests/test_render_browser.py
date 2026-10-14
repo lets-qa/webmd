@@ -8,26 +8,9 @@ Locally, tests are skipped if Playwright or its Chromium isn't installed.
 CI sets WEBMD_REQUIRE_BROWSER=1 so a missing browser fails instead.
 """
 
-import os
-
 import pytest
 
-playwright_sync = pytest.importorskip("playwright.sync_api") if not os.environ.get("WEBMD_REQUIRE_BROWSER") else None
-if playwright_sync is None:
-    import playwright.sync_api as playwright_sync
-
-
-@pytest.fixture(scope="module")
-def browser():
-    with playwright_sync.sync_playwright() as p:
-        try:
-            b = p.chromium.launch()
-        except Exception as e:  # browser binary not installed
-            if os.environ.get("WEBMD_REQUIRE_BROWSER"):
-                raise
-            pytest.skip(f"Chromium not available: {e}")
-        yield b
-        b.close()
+# The `browser` fixture lives in conftest.py (shared with test_e2e_https.py).
 
 
 @pytest.fixture

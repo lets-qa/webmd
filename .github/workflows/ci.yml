@@ -41,11 +41,50 @@ jobs:
       - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
           python-version: ${{ matrix.python }}
-      - name: Install Chromium for the browser rendering tests
+      - name: Install Chromium for the browser tests
         run: uv run --group dev playwright install --with-deps chromium
-      - run: uv run --group dev pytest -v -rs
+      - name: Run tests with coverage
+        # Per-job threshold off: platform-specific branches (Windows vs POSIX) can
+        # only be covered in aggregate, which the coverage job checks.
+        run: uv run --group dev pytest -v -rs --cov --cov-report=term --cov-fail-under=0
         env:
-          WEBMD_REQUIRE_BROWSER: "1"  # a missing browser fails the job instead of skipping the XSS tests
+          WEBMD_REQUIRE_BROWSER: "1"  # a missing browser fails the job instead of skipping the browser tests
+          COVERAGE_FILE: ${{ github.workspace }}/.coverage.${{ matrix.os }}-py${{ matrix.python }}
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: coverage-${{ matrix.os }}-py${{ matrix.python }}
+          path: .coverage.${{ matrix.os }}-py${{ matrix.python }}
+          include-hidden-files: true
+          if-no-files-found: error
+
+  coverage:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: coverage-*
+          merge-multiple: true
+      - name: Combine coverage from all OS/Python jobs and enforce the 90% floor
+        run: |
+          uv run --group dev coverage combine --keep .coverage.*
+          uv run --group dev coverage report --fail-under=90
+          uv run --group dev coverage html -d htmlcov
+          {
+            echo "## Coverage (combined: Linux, macOS, Windows × Python 3.9–3.14)"
+            echo
+            echo '```'
+            uv run --group dev coverage report --format=text
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: coverage-html
+          path: htmlcov/
 
   build:
     runs-on: ubuntu-latest

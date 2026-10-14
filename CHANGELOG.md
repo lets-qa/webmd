@@ -10,6 +10,26 @@ changes under **Security**, **Added**, **Changed**, **Fixed**, **Removed**, and
 
 ## [Unreleased]
 
+### Fixed
+
+- Visiting the `http://` URL of an HTTPS server now shows the "This server
+  only speaks HTTPS" message in browsers. Before, browsers kept waiting
+  until they timed out. curl did see the message, because webmd closed the
+  connection without reading the request, and the reset that caused made
+  browsers discard the reply.
+
+### Added (development)
+
+- Test coverage measurement (`pytest --cov`), including webmd server
+  subprocesses, with a 90% floor enforced in CI on the total combined across
+  Linux, macOS and Windows.
+- Browser end-to-end tests (Playwright) for self-signed HTTPS (certificate
+  rejected by a normal browser, accepted when its key is pinned, matching the
+  printed fingerprint, stable across restarts) and for the generated password
+  (logs in, survives restarts, edits to `.env` respected, wrong or missing
+  credentials refused).
+- Tests for startup errors and credentials-file handling.
+
 ## [0.2.1] - Unreleased (release candidate; date set when tagged)
 
 A maintenance release focused on security, offline use, and Windows support.

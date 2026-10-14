@@ -92,7 +92,8 @@ def serve(tmp_path, site):
         full_env = {k: v for k, v in os.environ.items() if not k.startswith("WEBMD_")}
         full_env["PYTHONUNBUFFERED"] = "1"
         full_env.update(XDG_CONFIG_HOME=str(config_home), **(env or {}))
-        log = tmp_path / f"server-{port}.log"
+        # Unique per server: free_port() can hand out the same port twice in one test.
+        log = tmp_path / f"server-{len(procs)}-{port}.log"
         port_args = ["-p", str(port)] if port_flag and "-p" not in args else []
         proc = subprocess.Popen(
             [sys.executable, "-m", "webmd", str(site), *port_args, *args],
@@ -122,3 +123,30 @@ def serve(tmp_path, site):
     for p in procs:
         p.terminate()
         p.wait(timeout=5)
+
+
+# --- Browser (Playwright) -----------------------------------------------------
+# Skipped locally when Playwright or Chromium is missing; CI sets
+# WEBMD_REQUIRE_BROWSER=1 so a missing browser fails instead of skipping.
+
+
+@pytest.fixture(scope="session")
+def playwright_instance():
+    if os.environ.get("WEBMD_REQUIRE_BROWSER"):
+        from playwright.sync_api import sync_playwright
+    else:
+        sync_playwright = pytest.importorskip("playwright.sync_api").sync_playwright
+    with sync_playwright() as p:
+        yield p
+
+
+@pytest.fixture(scope="session")
+def browser(playwright_instance):
+    try:
+        b = playwright_instance.chromium.launch()
+    except Exception as e:  # browser binary not installed
+        if os.environ.get("WEBMD_REQUIRE_BROWSER"):
+            raise
+        pytest.skip(f"Chromium not available: {e}")
+    yield b
+    b.close()
