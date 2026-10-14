@@ -430,6 +430,28 @@ Every push to `main` and every pull request runs
   checks both contain every bundled asset
 - **install:** installs the built wheel into a clean environment on each of
   the three OSes, starts it, and fetches a page and all of its assets
+- **ci-passed:** a final gate that succeeds only if every job above succeeded.
+  A failed, skipped or cancelled job fails it.
+
+### Merge protection
+
+`main` is protected by a repository ruleset, **"main: require CI"** (*Settings →
+Rules → Rulesets*):
+
+- Changes reach `main` only through a pull request; direct pushes are blocked.
+- A PR can merge only when the **`ci-passed`** check is green. That covers
+  lint, all 18 test jobs, combined coverage ≥ 90%, the build, and the install
+  smoke tests. Branch protection requires just that one check, so adding or
+  renaming matrix jobs doesn't need a settings change.
+- PRs don't have to be up to date with `main` first, and no approving review
+  is required.
+- Force-pushes to `main` and deleting it are blocked.
+- Repository admins can bypass the rule in an emergency. GitHub records each
+  bypass.
+
+PRs targeting other branches (for example, a PR stacked on a release branch)
+still run CI, but merging them isn't gated. The gate applies when the work
+reaches `main`.
 
 ### Releasing
 
