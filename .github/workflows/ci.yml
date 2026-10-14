@@ -130,3 +130,24 @@ jobs:
           if [ "$RUNNER_OS" = "Windows" ]; then py="$RUNNER_TEMP/smoke/Scripts/python.exe"; else py="$RUNNER_TEMP/smoke/bin/python"; fi
           cd "$RUNNER_TEMP"  # so the repo checkout can't shadow the installed package
           "$py" "$GITHUB_WORKSPACE/scripts/smoke_installed.py"
+
+  # The single required status check for merging (see "Merge protection" in the
+  # README). It depends on every other job, so the branch rule never needs
+  # updating when matrix entries are added or renamed. `if: always()` makes it
+  # run, and fail, when a dependency fails or is skipped/cancelled. Without
+  # that, a skipped gate would count as passing.
+  ci-passed:
+    name: ci-passed
+    if: always()
+    needs: [lint, test, coverage, build, install]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require every CI job to have succeeded
+        env:
+          RESULTS: ${{ toJSON(needs.*.result) }}
+        run: |
+          echo "job results: $RESULTS"
+          if [ "$(echo "$RESULTS" | jq -r 'all(. == "success")')" != "true" ]; then
+            echo "::error::Not all CI jobs succeeded: $RESULTS"
+            exit 1
+          fi
