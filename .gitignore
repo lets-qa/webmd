@@ -9,3 +9,7 @@ __pycache__/
 build/
 dist/
 .venv/
+.playwright-mcp/
+.coverage
+.coverage.*
+htmlcov/

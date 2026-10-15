@@ -1,0 +1,13 @@
+:root { color-scheme: light dark; }
+body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+       background: Canvas; color: CanvasText; }
+header { position: sticky; top: 0; padding: 10px 24px; font-size: 14px; z-index: 1;
+         border-bottom: 1px solid rgba(127,127,127,.3); background: Canvas; }
+header a { color: #0969da; text-decoration: none; }
+header a:hover { text-decoration: underline; }
+header .raw { float: right; }
+.markdown-body { max-width: 900px; margin: 0 auto; padding: 32px 24px; background: transparent; }
+.listing { list-style: none; padding: 0; }
+.listing li { padding: 6px 4px; border-bottom: 1px solid rgba(127,127,127,.15); }
+.listing .icon { display: inline-block; width: 1.6em; }
+.webmd-error { color: #cf222e; white-space: pre-wrap; }

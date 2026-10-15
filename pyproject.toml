@@ -19,6 +19,9 @@ classifiers = [
     "Environment :: Web Environment",
     "Intended Audience :: Developers",
     "Operating System :: OS Independent",
+    "Operating System :: MacOS",
+    "Operating System :: Microsoft :: Windows",
+    "Operating System :: POSIX :: Linux",
     "Programming Language :: Python :: 3",
     "Topic :: Text Processing :: Markup :: Markdown",
     "Topic :: Internet :: WWW/HTTP :: HTTP Servers",
@@ -28,6 +31,7 @@ classifiers = [
 Homepage = "https://github.com/lets-qa/webmd"
 Repository = "https://github.com/lets-qa/webmd"
 Issues = "https://github.com/lets-qa/webmd/issues"
+Changelog = "https://github.com/lets-qa/webmd/blob/main/CHANGELOG.md"
 
 [project.scripts]
 webmd = "webmd.cli:main"
@@ -36,10 +40,16 @@ webmd = "webmd.cli:main"
 path = "src/webmd/__init__.py"
 
 [tool.hatch.build.targets.sdist]
-include = ["src/webmd", "README.md", "LICENSE", "pyproject.toml"]
+include = ["/src/webmd", "/README.md", "/CHANGELOG.md", "/LICENSE", "/pyproject.toml"]
 
 [dependency-groups]
-dev = ["pytest>=8", "ruff>=0.6"]
+dev = [
+    "coverage[toml]>=7.10.6",
+    "playwright>=1.40",
+    "pytest>=8",
+    "pytest-cov>=6",
+    "ruff>=0.6",
+]
 
 [tool.ruff]
 line-length = 120
@@ -50,3 +60,25 @@ select = ["E", "F", "W", "B", "UP", "I"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[tool.coverage.run]
+source = ["webmd"]
+branch = true
+# Most tests start webmd as a subprocess and stop it with SIGTERM. "patch"
+# makes coverage follow those subprocesses; sigterm makes them save data on exit.
+patch = ["subprocess"]
+sigterm = true
+parallel = true
+# CI combines data from Linux, macOS and Windows runners: map their paths together.
+relative_files = true
+
+[tool.coverage.paths]
+source = ["src/webmd", "*/src/webmd", "*\\src\\webmd"]
+
+[tool.coverage.report]
+fail_under = 90
+show_missing = true
+skip_covered = false
+exclude_also = [
+    'if __name__ == .__main__.:',
+]

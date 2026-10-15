@@ -5,6 +5,7 @@ import pytest
 from cryptography import x509
 
 from webmd import tls
+from webmd.permissions import is_private
 
 
 def test_self_signed_cert_covers_names(tmp_path):
@@ -13,7 +14,7 @@ def test_self_signed_cert_covers_names(tmp_path):
     assert tls.ensure_self_signed(cert, key, names) is True
     parsed = x509.load_pem_x509_certificate(cert.read_bytes())
     assert names <= tls._cert_names(parsed)
-    assert key.stat().st_mode & 0o777 == 0o600
+    assert is_private(key)
     tls.server_context(cert, key)  # loads cleanly
 
 

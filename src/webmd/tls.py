@@ -2,7 +2,6 @@
 
 import datetime
 import ipaddress
-import os
 import socket
 import ssl
 from pathlib import Path
@@ -11,6 +10,8 @@ from cryptography import x509
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.x509.oid import ExtendedKeyUsageOID, NameOID
+
+from .permissions import create_private_file
 
 VALID_DAYS = 825
 RENEW_WITHIN_DAYS = 30
@@ -75,11 +76,13 @@ def ensure_self_signed(cert_path, key_path, names):
         return False
 
     key = ec.generate_private_key(ec.SECP256R1())
-    subject = x509.Name([
-        # Browsers match against the SAN list, not the CN, and CN is capped at 64 chars.
-        x509.NameAttribute(NameOID.COMMON_NAME, "webmd"),
-        x509.NameAttribute(NameOID.ORGANIZATION_NAME, "webmd self-signed"),
-    ])
+    subject = x509.Name(
+        [
+            # Browsers match against the SAN list, not the CN, and CN is capped at 64 chars.
+            x509.NameAttribute(NameOID.COMMON_NAME, "webmd"),
+            x509.NameAttribute(NameOID.ORGANIZATION_NAME, "webmd self-signed"),
+        ]
+    )
     now = datetime.datetime.now(datetime.timezone.utc)
     cert = (
         x509.CertificateBuilder()
@@ -101,12 +104,7 @@ def ensure_self_signed(cert_path, key_path, names):
         serialization.PrivateFormat.PKCS8,
         serialization.NoEncryption(),
     )
-    # Write the key with 0600 from the start; replace any old key atomically.
-    tmp = key_path.with_suffix(".tmp")
-    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-    with os.fdopen(fd, "wb") as f:
-        f.write(key_bytes)
-    os.replace(tmp, key_path)
+    create_private_file(key_path, key_bytes)
     cert_path.write_bytes(cert.public_bytes(serialization.Encoding.PEM))
     return True
 
