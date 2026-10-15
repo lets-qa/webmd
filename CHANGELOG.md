@@ -4,39 +4,14 @@ All notable user-facing changes to webmd are documented here.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and webmd uses [Semantic Versioning](https://semver.org/). Each release lists
-changes under **Security**, **Added**, **Changed**, **Fixed**, **Removed**, and
-**Known limitations**, as applicable. Unreleased work goes under
-`[Unreleased]` and moves to a version heading when that version is tagged.
+changes under **Security**, **Added**, **Changed**, **Fixed**, **Removed**,
+**Development** (tests, CI, tooling) and **Known limitations**, as applicable.
+Unreleased work goes under `[Unreleased]` and moves to a version heading when
+that version is tagged.
 
 ## [Unreleased]
 
-### Fixed
-
-- Visiting the `http://` URL of an HTTPS server now shows the "This server
-  only speaks HTTPS" message in browsers. Before, browsers kept waiting
-  until they timed out. curl did see the message, because webmd closed the
-  connection without reading the request, and the reset that caused made
-  browsers discard the reply.
-
-### Added (development)
-
-- Test coverage measurement (`pytest --cov`), including webmd server
-  subprocesses, with a 90% floor enforced in CI on the total combined across
-  Linux, macOS and Windows.
-- Browser end-to-end tests (Playwright) for self-signed HTTPS (certificate
-  rejected by a normal browser, accepted when its key is pinned, matching the
-  printed fingerprint, stable across restarts) and for the generated password
-  (logs in, survives restarts, edits to `.env` respected, wrong or missing
-  credentials refused).
-- Tests for startup errors and credentials-file handling.
-- CI skips the full suite on `main` when that exact code already passed, matched
-  by git tree so any changed file, tests and workflows included, re-runs it.
-  Releases reuse a pass on the tagged code, or run the full suite before
-  publishing if there isn't one.
-- The release workflow now runs the same full CI suite as PRs (all OSes,
-  coverage, install checks). It used to run only `pytest -q` on Linux.
-
-## [0.2.1] - Unreleased (release candidate; date set when tagged)
+## [0.2.1] - 2026-10-15
 
 A maintenance release focused on security, offline use, and Windows support.
 No configuration changes are needed. One behaviour change to note: an
@@ -95,7 +70,7 @@ explicit `-p PORT` that's already in use is now an error (see **Changed**).
   browser rendering tests, on Windows as well as Linux and macOS, with Python
   3.9–3.14. The built wheel is also installed and smoke-tested on each OS.
 - **Homebrew formula** prepared in `packaging/homebrew/`, to be published in a
-  `lets-qa/homebrew-tap` tap once 0.2.1 is on PyPI. It isn't published yet.
+  `lets-qa/homebrew-tap` tap after this release is on PyPI.
 
 ### Changed
 
@@ -109,6 +84,11 @@ explicit `-p PORT` that's already in use is now an error (see **Changed**).
 
 ### Fixed
 
+- **Visiting the `http://` address of an HTTPS server now shows the "This
+  server only speaks HTTPS" message in browsers.** Before, browsers kept
+  waiting until they timed out; only curl saw the message. webmd closed the
+  connection without reading the request, and the resulting reset made
+  browsers discard the reply.
 - **Startup errors are readable messages instead of Python tracebacks.** This
   covers a busy port, permission denied, an address not on this machine, and
   an unresolvable `-b` hostname.
@@ -120,6 +100,28 @@ explicit `-p PORT` that's already in use is now an error (see **Changed**).
   program listened on `*:8000` used to succeed and silently share that port.
   It's now detected as "in use". Restarting webmd on the same port while old
   connections are still closing still works.
+
+### Development
+
+- **Test coverage is measured and enforced.** `pytest --cov` measures branch
+  coverage, including the webmd server processes the tests start. CI combines
+  results from Linux, macOS and Windows and fails below 90% (currently 96%).
+- **Browser end-to-end tests (Playwright)** for self-signed HTTPS and the
+  generated password:
+  - a normal browser rejects the certificate
+  - a browser that pins only its key accepts it, and the certificate matches
+    the printed fingerprint and is unchanged across restarts
+  - the generated password logs in and survives restarts, and edits to `.env`
+    are respected
+  - wrong or missing credentials are refused
+- Tests for startup errors and credentials-file handling.
+- **Merging into `main` requires CI to pass.** A single `ci-passed` check is
+  required by a repository ruleset.
+- **CI skips code that already passed,** matched by git tree, so any change
+  to any file (tests and workflows included) re-runs the suite. Releases reuse
+  an existing pass on the tagged code, or run the full suite before publishing.
+- **The release workflow runs the same full CI suite as pull requests:** all
+  OSes, coverage and install checks. It used to run only `pytest -q` on Linux.
 
 ### Known limitations
 
@@ -175,6 +177,6 @@ explicit `-p PORT` that's already in use is now an error (see **Changed**).
   with a password generated into `~/.config/webmd/.env`.
 - `.env` files are never served or listed, and path traversal is blocked.
 
-[Unreleased]: https://github.com/lets-qa/webmd/compare/v0.2.0...HEAD
-[0.2.1]: https://github.com/lets-qa/webmd/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/lets-qa/webmd/compare/v0.2.1...HEAD
+[0.2.1]: https://github.com/lets-qa/webmd/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/lets-qa/webmd/releases/tag/v0.2.0
