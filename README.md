@@ -431,7 +431,8 @@ Every push to `main` and every pull request runs
 - **install:** installs the built wheel into a clean environment on each of
   the three OSes, starts it, and fetches a page and all of its assets
 - **ci-passed:** a final gate that succeeds only if every job above succeeded.
-  A failed, skipped or cancelled job fails it.
+  A failed, skipped or cancelled job fails it. The one exception is when the
+  `reuse` job found that this exact code already passed (see below).
 
 ### Merge protection
 
@@ -452,6 +453,51 @@ Rules → Rulesets*):
 PRs targeting other branches (for example, a PR stacked on a release branch)
 still run CI, but merging them isn't gated. The gate applies when the work
 reaches `main`.
+
+### Avoiding repeat runs
+
+A full CI run takes about 45 runner-minutes, two-thirds of it on Windows. CI
+skips work it has already done, without ever skipping code it hasn't
+tested.
+
+**What counts as "already tested":** a full CI pass on code with the **same
+git tree**, meaning every file and path is byte-identical, including tests,
+workflows and `pyproject.toml`. Different commits can share a tree. A merge
+commit, a squash or an empty commit that changes nothing still counts as
+tested. Any edit to any file makes a new tree, and the suite runs.
+
+**How it's recorded:** when every job passes, `ci-passed` uploads a small
+artifact named `tested-tree-<tree>` for the tree **it actually checked out and
+tested**. That matters for pull requests: a `pull_request` run tests a
+temporary merge of the PR into its target branch, not the PR's head commit,
+and that merge is exactly what lands on `main` if nothing else merges first.
+Markers last 90 days. Markers from fork PRs are ignored, because a fork
+controls its copy of the workflow.
+
+**When CI skips:** on the first attempt of a push or PR run, the `reuse` job
+looks for a marker for the commit's tree. If it finds one, every other job is
+skipped, and `ci-passed` reports success with a link to the earlier run. In
+practice:
+
+- **Merging a green PR into `main`:** if `main` didn't move since the PR's last
+  run, the merged code is the code that run tested, so the push to `main` is
+  skipped. If `main` gained other commits in between, the merged code is new
+  and gets tested.
+- **A PR updated with a no-op push** (for example, an empty commit) is skipped.
+- **Re-running a workflow** (*Re-run all jobs*) always runs the full suite.
+  So do **manual runs** (*Actions → CI → Run workflow*). Use either to re-check
+  on new runner images or after a dependency release.
+
+**Releases:** pushing a `v*` tag runs [`release.yml`](.github/workflows/release.yml).
+Its `verify` job checks for a marker for the tagged tree. If there is one, it
+links that run and goes straight to build and publish. If not, it runs the
+full CI suite first (the same jobs as a PR, called as a reusable workflow) and
+publishes only if that passes. A release can never publish code that hasn't
+passed the full suite at least once.
+
+**When in doubt, it tests.** If the lookup fails (an API error, no marker, a
+fork marker), the full suite runs. To see why a run was skipped, open its
+`reuse` (CI) or `verify` (release) job, which links the run being reused.
 
 ### Releasing
 
@@ -479,8 +525,10 @@ git tag vX.Y.Z
 git push origin vX.Y.Z
 ```
 
-The workflow checks the tag matches `__version__`, runs the tests, builds,
-publishes to PyPI, and creates a GitHub release with the built files attached.
+The workflow checks the tag matches `__version__`, makes sure this exact code
+has passed the full CI suite (reusing an earlier pass if there is one; see
+"Avoiding repeat runs"), builds, publishes to PyPI, and creates a GitHub
+release with the built files attached.
 
 ### Homebrew
 

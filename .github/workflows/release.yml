@@ -12,8 +12,17 @@ permissions:
   contents: read
 
 jobs:
-  build:
+  # A release must have passed the full CI suite at least once. If the tagged
+  # code (by git tree, so the same files and tests) already passed ci.yml, that
+  # run counts. Otherwise the full suite runs here first. Either way, publishing
+  # needs a pass on exactly this code.
+  verify:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read  # to look up earlier runs
+    outputs:
+      passed: ${{ steps.check.outputs.passed }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -26,12 +35,49 @@ jobs:
             echo "::error::Tag $GITHUB_REF_NAME does not match __version__ $version"
             exit 1
           fi
-      - run: uv run --group dev pytest -q
+      - id: check
+        uses: $/.github/actions/already-tested
+      - name: Report
+        env:
+          PASSED: ${{ steps.check.outputs.passed }}
+          RUN_ID: ${{ steps.check.outputs.run_id }}
+        run: |
+          if [ "$PASSED" = "true" ]; then
+            echo "This exact code already passed CI: https://github.com/$GITHUB_REPOSITORY/actions/runs/$RUN_ID" | tee -a "$GITHUB_STEP_SUMMARY"
+          else
+            echo "This exact code has not passed CI yet: running the full suite before publishing." | tee -a "$GITHUB_STEP_SUMMARY"
+          fi
+
+  # Full CI only when nothing earlier covers this code. Same jobs as on a PR.
+  ci:
+    needs: verify
+    if: needs.verify.outputs.passed != 'true'
+    permissions:
+      contents: read
+      actions: read
+    uses: $/.github/workflows/ci.yml
+    with:
+      full: true
+
+  build:
+    needs: [verify, ci]
+    # Run when verify passed and CI either passed or was skipped because the code was already tested.
+    if: >-
+      always() && needs.verify.result == 'success' &&
+      (needs.ci.result == 'success' || (needs.ci.result == 'skipped' && needs.verify.outputs.passed == 'true'))
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
       - run: uv build
       - run: uvx twine check --strict dist/*
+      - name: Wheel and sdist contain the bundled assets
+        run: uv run --no-project python scripts/check_dist.py dist
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: dist
+          name: release-dist
           path: dist/
 
   publish-pypi:
@@ -45,7 +91,7 @@ jobs:
     steps:
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          name: dist
+          name: release-dist
           path: dist/
       - uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # v1.14.2
 
@@ -57,7 +103,7 @@ jobs:
     steps:
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          name: dist
+          name: release-dist
           path: dist/
       - name: Create GitHub release
         env:

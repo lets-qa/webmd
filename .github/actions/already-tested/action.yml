@@ -1,0 +1,25 @@
+name: Already tested?
+description: >
+  Sets `passed=true` if a full CI run already passed on this exact code (same
+  git tree, as recorded by ci.yml's tested-tree marker), so the caller can
+  skip re-running the suite. Needs a checkout and `actions: read`.
+outputs:
+  passed:
+    description: '"true" if identical code already passed, otherwise "false"'
+    value: ${{ steps.check.outputs.passed }}
+  run_id:
+    description: ID of the run that already passed (when passed is "true")
+    value: ${{ steps.check.outputs.run_id }}
+runs:
+  using: composite
+  steps:
+    - id: check
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        if scripts/ci_already_passed.sh "$GITHUB_SHA"; then
+          echo "passed=true" >> "$GITHUB_OUTPUT"
+        else
+          echo "passed=false" >> "$GITHUB_OUTPUT"
+        fi
