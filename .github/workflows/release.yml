@@ -80,8 +80,13 @@ jobs:
           name: release-dist
           path: dist/
 
+  # `always()` plus explicit checks, here and below: without them GitHub skips
+  # these jobs whenever any earlier job in the chain was skipped. `ci` is
+  # skipped on purpose when the code already passed, and that silently
+  # skipped publishing (v0.2.1's first tag: build ran, nothing published).
   publish-pypi:
     needs: build
+    if: always() && needs.build.result == 'success'
     runs-on: ubuntu-latest
     environment:
       name: pypi
@@ -97,6 +102,7 @@ jobs:
 
   github-release:
     needs: publish-pypi
+    if: always() && needs.publish-pypi.result == 'success'
     runs-on: ubuntu-latest
     permissions:
       contents: write

@@ -122,6 +122,10 @@ explicit `-p PORT` that's already in use is now an error (see **Changed**).
   an existing pass on the tagged code, or run the full suite before publishing.
 - **The release workflow runs the same full CI suite as pull requests:** all
   OSes, coverage and install checks. It used to run only `pytest -q` on Linux.
+- **Fixed the release workflow skipping publishing when it reused a CI pass.**
+  The publish and GitHub-release jobs were skipped whenever the full CI run was
+  skipped as already passed, so the first `v0.2.1` tag built but published
+  nothing. They now run whenever the build succeeds.
 
 ### Known limitations
 
