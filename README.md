@@ -51,6 +51,12 @@ webmd --open
 webmd is a command-line tool, so the recommended way is an isolated tool
 install with [uv](https://docs.astral.sh/uv/) or [pipx](https://pipx.pypa.io/).
 
+With [Homebrew](https://brew.sh) (macOS and Linux):
+
+```bash
+brew install lets-qa/tap/webmd
+```
+
 From PyPI:
 
 ```bash
@@ -91,8 +97,8 @@ webmd --version
 To upgrade or remove:
 
 ```bash
-uv tool upgrade webmd     # pipx upgrade webmd
-uv tool uninstall webmd   # pipx uninstall webmd
+uv tool upgrade webmd     # pipx upgrade webmd    # brew upgrade webmd
+uv tool uninstall webmd   # pipx uninstall webmd  # brew uninstall webmd
 ```
 
 ## Usage
@@ -532,9 +538,16 @@ release with the built files attached.
 
 ### Homebrew
 
-A Homebrew formula is prepared in
-[`packaging/homebrew/`](packaging/homebrew/), to be published through a
-dedicated tap after a release is on PyPI. See that directory's README.
+webmd is published through the tap
+[`lets-qa/homebrew-tap`](https://github.com/lets-qa/homebrew-tap), so users run
+`brew install lets-qa/tap/webmd`. That repo's CI runs `brew style`,
+`brew audit --strict --online`, an install from source and `brew test` on
+Linux and macOS.
+
+**After each PyPI release,** update the formula's `url` and `sha256` in both
+the tap (`Formula/webmd.rb`) and this repo's source copy
+([`packaging/homebrew/webmd.rb`](packaging/homebrew/webmd.rb)). See
+[`packaging/homebrew/README.md`](packaging/homebrew/README.md) for the steps.
 
 ## License
 

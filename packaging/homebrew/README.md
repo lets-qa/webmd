@@ -2,6 +2,12 @@
 
 `webmd.rb` is the formula. It is meant to live in a dedicated tap repo, not in this repo.
 
+## Status
+
+**Published** in [`lets-qa/homebrew-tap`](https://github.com/lets-qa/homebrew-tap)
+(created 2026-10-15) at webmd **0.2.1**, using the PyPI sdist. This file and
+`webmd.rb` here are the source copy. Keep `Formula/webmd.rb` in the tap in sync.
+
 ## Strategy: dedicated tap now, homebrew-core later
 
 homebrew-core's Package Acceptance Policy requires, for a GitHub project, at least
@@ -49,15 +55,11 @@ so the formula declares (split across lines, as `brew style` requires):
 
 ## Current state of `webmd.rb`
 
-The license and `test do` block are already updated for 0.2.1 (the test also checks
-the bundled `purify.min.js` is served). `url`/`sha256` still point at the
-**published 0.2.0 sdist** on purpose: 0.2.1 isn't on PyPI yet, and the formula must
-only ever reference a released, tested artifact. Updating to 0.2.1 is step 2-3 of the
-release procedure below. Note that 0.2.0's page doesn't serve `/__webmd__/static/`,
-so the updated test is expected to fail against the 0.2.0 URL. Publish the tap
-only after switching to the 0.2.1 sdist.
+Points at the **PyPI 0.2.1 sdist**
+(`sha256 4461a47810d7c500f3903781945b884ae7339f7f64b7c7f4833759fd36454051`). The test
+checks `--version`, serves a page, and fetches the bundled `purify.min.js`.
 
-## Create the tap (one time)
+## Create the tap (one time, done 2026-10-15)
 
     # on GitHub: create the public repo lets-qa/homebrew-tap (name MUST start with homebrew-)
     git clone https://github.com/lets-qa/homebrew-tap && cd homebrew-tap
@@ -123,3 +125,24 @@ Same container setup, with `url "file:///work/webmd-0.2.1.tar.gz"` and its sha25
 
 NOT verified: macOS installs (Linux container only); the real PyPI 0.2.1 sdist
 (not published yet); installing from the real `lets-qa/tap` (not created).
+
+### Verified against the published PyPI 0.2.1 sdist (2026-10-15)
+
+Container `homebrew/brew`, linux/arm64, local tap:
+
+- `brew install --build-from-source`: PASS (`Cellar/webmd/0.2.1: 40 files, 460.4KB, built in 32 seconds`)
+- `webmd --version` -> `webmd 0.2.1`
+- `brew test`: PASS (`GET /README.md -> 200`, `GET /__webmd__/static/vendor/purify.min.js -> 200`)
+- `brew audit --strict --new --online`: PASS (no offenses)
+- `brew style`: PASS
+- `brew uninstall`: PASS, command removed
+
+After publishing `lets-qa/homebrew-tap`, the **real user path** in a fresh container:
+
+- `brew install lets-qa/tap/webmd`: PASS (auto-tapped, built in 38 seconds)
+- Served a page and the bundled JS: HTTP 200
+- `brew upgrade webmd`: no-op ("already installed")
+- `brew uninstall webmd` + `brew untap lets-qa/tap`: PASS, command removed
+
+The tap's own CI on GitHub (first run): **ubuntu-latest and macos-latest both green**
+(style, audit `--strict --online`, install from source, `brew test`, run).
