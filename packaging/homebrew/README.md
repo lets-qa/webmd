@@ -5,8 +5,17 @@
 ## Status
 
 **Published** in [`lets-qa/homebrew-tap`](https://github.com/lets-qa/homebrew-tap)
-(created 2026-10-15) at webmd **0.2.1**, using the PyPI sdist. This file and
-`webmd.rb` here are the source copy. Keep `Formula/webmd.rb` in the tap in sync.
+(created 2026-10-15) at webmd **0.2.1**, using the PyPI sdist.
+
+**Version bumps are automatic.** The tap's daily `Bump webmd` workflow detects
+a newer webmd on PyPI. It tests the updated formula (style, `audit --strict
+--online`, install from source, `brew test` and the version, on Linux and
+macOS) and commits the `url`/`sha256` change only if everything passes.
+Verified on 2026-10-15: with the formula wound back to 0.2.0 on a test branch,
+it bumped to 0.2.1, all checks passed, and it committed. On the up-to-date
+`main` it did nothing, in about 4 runner-seconds. The tap's `Formula/webmd.rb`
+is the live copy. `webmd.rb` here is a reference and only needs editing for
+formula changes beyond url/sha256.
 
 ## Strategy: dedicated tap now, homebrew-core later
 
@@ -69,7 +78,7 @@ checks `--version`, serves a page, and fetches the bundled `purify.min.js`.
 (`brew tap-new lets-qa/tap` also scaffolds the CI workflows for bottling, if wanted.
 A pure-Python formula like this works without bottles; it builds in ~30s.)
 
-## Release procedure (per webmd version)
+## Manual release procedure (fallback; normally automatic, see Status)
 
 1. Publish the new version to PyPI and smoke test it (`pipx install webmd==X.Y.Z`).
 2. Get the sdist URL and sha256 from `https://pypi.org/pypi/webmd/X.Y.Z/json`
