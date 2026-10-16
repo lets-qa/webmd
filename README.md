@@ -544,10 +544,14 @@ webmd is published through the tap
 `brew audit --strict --online`, an install from source and `brew test` on
 Linux and macOS.
 
-**After each PyPI release,** update the formula's `url` and `sha256` in both
-the tap (`Formula/webmd.rb`) and this repo's source copy
-([`packaging/homebrew/webmd.rb`](packaging/homebrew/webmd.rb)). See
-[`packaging/homebrew/README.md`](packaging/homebrew/README.md) for the steps.
+**After each PyPI release, the tap updates itself.** Its daily
+[`Bump webmd`](https://github.com/lets-qa/homebrew-tap/blob/main/.github/workflows/bump-webmd.yml)
+workflow sees the new version on PyPI, tests the updated formula on Linux and
+macOS, and commits it only if every check passes. To pick it up immediately,
+run that workflow by hand from the tap's Actions tab.
+[`packaging/homebrew/webmd.rb`](packaging/homebrew/webmd.rb) here is a
+reference copy and can lag behind. The tap's `Formula/webmd.rb` is what users
+install.
 
 ## License
 
