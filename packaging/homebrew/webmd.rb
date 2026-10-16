@@ -3,8 +3,8 @@ class Webmd < Formula
 
   desc "Serve a directory in the browser, rendering Markdown files as web pages"
   homepage "https://github.com/lets-qa/webmd"
-  url "https://files.pythonhosted.org/packages/aa/45/44506cb2220abc4405e7ce5be46cf15365b915e8a52998084961f7dace0c/webmd-0.2.0.tar.gz"
-  sha256 "9fbf8be39972e7708f02041eababc8fe405737712db876383420f8b5bb14c75f"
+  url "https://files.pythonhosted.org/packages/0d/86/0da41f8354bd360217990d50540ef48f18dfc62cefddb8b96d8a2c6d8655/webmd-0.2.1.tar.gz"
+  sha256 "4461a47810d7c500f3903781945b884ae7339f7f64b7c7f4833759fd36454051"
   license all_of: [
     "MIT",
     "BSD-3-Clause",
